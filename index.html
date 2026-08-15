@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Promo Code QR Generator | Community Ambassador</title>
+    
+    <!-- Load required libraries from CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+
+    <style>
+        /* Base Styling */
+        :root {
+            --pokemongo-teal: #1FBDB2;
+            --pokemongo-blue: #22668D;
+            --pokemongo-yellow: #FFCB05;
+            --bg-color: #f4f7f6;
+            --card-bg: #ffffff;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            margin: 0;
+            padding: 20px;
+            color: #333;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: var(--card-bg);
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+        }
+
+        h1 {
+            color: var(--pokemongo-blue);
+            text-align: center;
+            margin-bottom: 5px;
+        }
+
+        p.subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+        }
+
+        /* Form Elements */
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            font-weight: bold;
+            margin-bottom: 8px;
+            color: #444;
+        }
+
+        input[type="text"], textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 6px;
+            font-size: 16px;
+            box-sizing: border-box;
+            transition: border-color 0.3s;
+        }
+
+        input[type="text"]:focus, textarea:focus {
+            border-color: var(--pokemongo-teal);
+            outline: none;
+        }
+
+        textarea {
+            resize: vertical;
+            font-family: monospace;
+        }
+
+        .help-text {
+            font-size: 13px;
+            color: #777;
+            margin-top: 5px;
+        }
+
+        /* Buttons */
+        .button-group {
+            display: flex;
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        button {
+            flex: 1;
+            padding: 14px 20px;
+            font-size: 16px;
+            font-weight: bold;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: opacity 0.2s, transform 0.1s;
+        }
+
+        button:active {
+            transform: scale(0.98);
+        }
+
+        .btn-primary {
+            background-color: var(--pokemongo-teal);
+            color: white;
+        }
+
+        .btn-secondary {
+            background-color: var(--pokemongo-blue);
+            color: white;
+            display: none;
+        }
+        
+        .btn-print {
+            background-color: var(--pokemongo-yellow);
+            color: #333;
+            display: none;
+        }
+
+        button:hover {
+            opacity: 0.9;
+        }
+
+        /* Preview Area */
+        #previewArea {
+            margin-top: 40px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            justify-content: center;
+        }
+
+        /* Print Specific Styling */
+        @media print {
+            body * {
+                visibility: hidden;
+            }
+            #previewArea, #previewArea * {
+                visibility: visible;
+            }
+            #previewArea {
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 100%;
+                justify-content: flex-start;
+            }
+            canvas {
+                page-break-inside: avoid;
+                margin-bottom: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Community Ambassador QR Generator</h1>
+    <p class="subtitle">Convert promo codes into printable redemption cards.</p>
+
+    <div class="form-group">
+        <label for="eventName">Event Name (Optional)</label>
+        <input type="text" id="eventName" placeholder="e.g., August Community Day Giveaway" value="Community Day Giveaway">
+    </div>
+
+    <div class="form-group">
+        <label for="prefix">QR Code Base URL / Prefix</label>
+        <input type="text" id="prefix" value="https://store.pokemongo.com/offer-redemption?passcode=">
+        <div class="help-text">This is the official web store URL structure that pre-fills the code for the user.</div>
+    </div>
+
+    <div class="form-group">
+        <label for="codes">Promo Codes</label>
+        <textarea id="codes" rows="5" placeholder="Paste codes here, separated by commas... (e.g., 62EGDH625ABMP, XYZ987ABC123)"></textarea>
+    </div>
+
+    <div class="button-group">
+        <button class="btn-primary" onclick="generateCards()">Generate Cards</button>
+        <button id="downloadBtn" class="btn-secondary" onclick="downloadZip()">Download ZIP</button>
+        <button id="printBtn" class="btn-print" onclick="window.print()">Print Cards</button>
+    </div>
+
+    <div id="previewArea"></div>
+</div>
+
+<script>
+    let generatedZip = null;
+
+    // Helper function to generate QR Code data URL
+    function createQRCode(text) {
+        return new Promise((resolve) => {
+            const tempDiv = document.createElement('div');
+            new QRCode(tempDiv, {
+                text: text,
+                width: 200,
+                height: 200,
+                colorDark : "#000000",
+                colorLight : "#ffffff",
+                correctLevel : QRCode.CorrectLevel.M
+            });
+            
+            // QRCode.js creates a canvas inside the div, but we need a brief timeout for it to render
+            setTimeout(() => {
+                const canvas = tempDiv.querySelector('canvas');
+                resolve(canvas.toDataURL("image/png"));
+            }, 100);
+        });
+    }
+
+    async function generateCards() {
+        const codesInput = document.getElementById('codes').value;
+        const prefix = document.getElementById('prefix').value;
+        const eventName = document.getElementById('eventName').value || "Pokémon GO Promo";
+        
+        // Clean and split codes
+        const codes = codesInput.split(',')
+            .map(c => c.trim())
+            .filter(c => c.length > 0);
+
+        if (codes.length === 0) {
+            alert("Please enter at least one promo code.");
+            return;
+        }
+
+        const previewArea = document.getElementById('previewArea');
+        previewArea.innerHTML = '<p>Generating cards... please wait.</p>';
+        
+        const zip = new JSZip();
+        const folder = zip.folder("pokemon_go_cards");
+        
+        // Clear preview area for rendering
+        previewArea.innerHTML = '';
+
+        for (let code of codes) {
+            // Create a canvas for each card
+            const canvas = document.createElement('canvas');
+            canvas.width = 400; 
+            canvas.height = 550;
+            const ctx = canvas.getContext('2d');
+            
+            // 1. Draw Card Background
+            ctx.fillStyle = "#ffffff";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // 2. Draw Teal Border
+            ctx.strokeStyle = "#1FBDB2";
+            ctx.lineWidth = 12;
+            ctx.strokeRect(6, 6, canvas.width - 12, canvas.height - 12);
+            
+            // 3. Draw Event Title
+            ctx.fillStyle = "#22668D";
+            ctx.font = "bold 24px 'Segoe UI', Arial, sans-serif";
+            ctx.textAlign = "center";
+            ctx.fillText(eventName, 200, 60);
+            
+            // 4. Generate & Draw QR Code
+            const qrDataUrl = await createQRCode(prefix + code);
+            const qrImg = new Image();
+            qrImg.src = qrDataUrl;
+            
+            await new Promise(r => qrImg.onload = r);
+            // Center the QR Code (canvas width 400 - img width 200) / 2 = 100
+            ctx.drawImage(qrImg, 100, 100, 200, 200);
+            
+            // 5. Draw Promo Code Text
+            ctx.fillStyle = "#E3352F"; // Red accent for the code
+            ctx.font = "bold 32px 'Courier New', monospace";
+            ctx.fillText(code, 200, 360);
+            
+            // 6. Draw Instructions
+            ctx.fillStyle = "#444444";
+            ctx.font = "18px 'Segoe UI', Arial, sans-serif";
+            ctx.fillText("Scan to redeem your items!", 200, 420);
+            
+            ctx.font = "14px 'Segoe UI', Arial, sans-serif";
+            ctx.fillStyle = "#777777";
+            ctx.fillText("Or manually redeem at:", 200, 460);
+            
+            ctx.fillStyle = "#22668D";
+            ctx.font = "bold 15px 'Segoe UI', Arial, sans-serif";
+            ctx.fillText("store.pokemongo.com/offer-redemption", 200, 485);
+            
+            // Append canvas to DOM
+            canvas.style.boxShadow = "0 2px 8px rgba(0,0,0,0.1)";
+            canvas.style.borderRadius = "8px";
+            previewArea.appendChild(canvas);
+            
+            // Add canvas image to ZIP file
+            const dataURL = canvas.toDataURL("image/png");
+            const base64Data = dataURL.replace(/^data:image\/(png|jpg);base64,/, "");
+            folder.file(`${code}.png`, base64Data, {base64: true});
+        }
+        
+        // Prepare ZIP for download
+        generatedZip = await zip.generateAsync({type:"blob"});
+        
+        // Reveal functional buttons
+        document.getElementById('downloadBtn').style.display = 'block';
+        document.getElementById('printBtn').style.display = 'block';
+    }
+
+    function downloadZip() {
+        if (generatedZip) {
+            saveAs(generatedZip, "pokemongo_promo_cards.zip");
+        }
+    }
+</script>
+
+</body>
+</html>
